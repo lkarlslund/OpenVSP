@@ -32,9 +32,7 @@ jobs:
       shell: bash
       run:   |
         sudo apt-get update
-        sudo apt-get install python3-dev libxml2-dev libfltk1.3-dev fluid libjpeg-dev libglm-dev libcminpack-dev libglew-dev swig doxygen graphviz texlive-latex-base zip
-        pip install sphinx
-
+        sudo apt-get install python3-sphinx python3-dev libxml2-dev libfltk1.3-dev fluid libjpeg-dev libglm-dev libcminpack-dev libglew-dev swig doxygen graphviz texlive-latex-base zip
 
     - name:  Build Linux
       if: runner.os == 'Linux'
