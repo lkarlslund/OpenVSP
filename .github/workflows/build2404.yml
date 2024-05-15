@@ -1,0 +1,76 @@
+name: CMake Build Matrix
+
+on: workflow_dispatch
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    env:
+      GCC_VER: gcc-${{ matrix.gcc-version }}
+      GPP_VER: g++-${{ matrix.gcc-version }}
+      GCC_VERNO: ${{ matrix.gcc-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.12]
+        gcc-version: [11]
+        os: [ ubuntu-24.04 ]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      if: runner.os != 'Linux'
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name:  Install Linux
+      if: runner.os == 'Linux'
+      shell: bash
+      run:   |
+        sudo apt-get update
+        sudo apt-get install python3-dev libxml2-dev libfltk1.3-dev fluid libjpeg-dev libglm-dev libcminpack-dev libglew-dev swig doxygen graphviz texlive-latex-base zip
+        pip install sphinx
+
+
+    - name:  Build Linux
+      if: runner.os == 'Linux'
+      shell: bash
+      run:   |
+        mkdir build buildlibs artifacts
+        cd $GITHUB_WORKSPACE/buildlibs
+        cmake -DCMAKE_BUILD_TYPE=Release -DVSP_USE_SYSTEM_LIBXML2=true -DVSP_USE_SYSTEM_GLM=true -DVSP_USE_SYSTEM_GLEW=true -DVSP_USE_SYSTEM_CMINPACK=true ../Libraries
+        make -j2
+        
+        cd $GITHUB_WORKSPACE/build
+        cmake -DCMAKE_BUILD_TYPE=Release -DVSP_CPACK_GEN=DEB -DVSP_LIBRARY_PATH=$GITHUB_WORKSPACE/buildlibs ../src
+        make -j2 package
+        
+        DEBFILE=${GITHUB_WORKSPACE}/build/OpenVSP-*-Linux.deb
+        VSPVER=$(ls $DEBFILE | awk 'BEGIN { FS = "-" } ; { print $2 }')
+        UVER=$(lsb_release -sr)
+        DEPLOY_FILE=${GITHUB_WORKSPACE}/build/OpenVSP-${VSPVER}-Ubuntu-${UVER}_amd64_${GITHUB_SHA}.deb
+        
+        cp $DEBFILE $DEPLOY_FILE
+        cp $DEPLOY_FILE $GITHUB_WORKSPACE/artifacts
+        
+        ls $DEPLOY_FILE && (echo "DEB CREATION SUCCESSFUL" && exit 0) || (echo "DEB CREATION FAILED" && exit 1)
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: artifact-${{ matrix.os }}-${{ matrix.python-version }}
+        path: ${{ github.workspace }}/artifacts
+
+  merge:
+   runs-on: ubuntu-latest
+   needs: build
+   steps:
+     - name: Merge Artifacts
+       uses: actions/upload-artifact/merge@v4
+       with:
+         name: combined-artifact
+         pattern: artifact-*
